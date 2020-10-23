@@ -388,12 +388,7 @@ class instruction_decoder:
         
         rtn = []
         
-        if instruction_code == 30:                                              # write rest of the elemnts as 0s and send "end of block" instruction
-            if self._elem_cntr < self._elem_num:
-                self._elem_num -= self._elem_cntr
-                while self._elem_num:
-                    self._elem_num -= 1
-                    rtn.append(0)
+        if instruction_code == 30:                                              # send "end of block" instruction
             rtn.append("EOB")
             
         elif instruction_code == 29:                                            # interpret section 3 data as number of 0s to write
@@ -443,7 +438,7 @@ class instruction_decoder:
     
 def idct(macro_blocks, sec1_data):
     
-    dct_mat_T = np.array(
+    dct_mat_1 = np.array(
         [0x5a82, 0x7d8a, 0x7642, 0x6a6e, 0x5a82, 0x471d, 0x30fc, 0x18f9,        # located @6039844
          0x5a82, 0x6a6e, 0x30fc, 0xe707, 0xa57e, 0x8276, 0x89be, 0xb8e3,         
          0x5a82, 0x471d, 0xcf04, 0x8276, 0xa57e, 0x18f9, 0x7642, 0x6a6e, 
@@ -452,6 +447,18 @@ def idct(macro_blocks, sec1_data):
          0x5a82, 0xb8e3, 0xcf04, 0x7d8a, 0xa57e, 0xe707, 0x7642, 0x9592, 
          0x5a82, 0x9592, 0x30fc, 0x18f9, 0xa57e, 0x7d8a, 0x89be, 0x471d, 
          0x5a82, 0x8276, 0x7642, 0x9592, 0x5a82, 0xb8e3, 0x30fc, 0xe707], dtype="int64").reshape((8,8))
+    
+    dct_mat_2 = \
+        [[1, 0x7d8a8000, 0x764200, [0x19220000, 0x7d8a8000, 1], 1, [0x7d8a8000,-0x19220000, 1], 0x30fc00, 0x19220000],    
+         [1, 0x6a6d8000, 0x30fc00, [0x471d0000,-0x6a6d8000, 1],-1, [0x471d0000, 0x6a6d8000,-1],-0x764200,-0x471d0000], 
+         [1, 0x471d0000,-0x30fc00, [0x6a6d8000, 0x471d0000,-1],-1, [0x6a6d8000,-0x471d0000, 1], 0x764200, 0x6a6d8000],
+         [1, 0x19220000,-0x764200, [0x19220000,-0x7d8a8000, 1], 1, [0x19220000, 0x7d8a8000, 1],-0x30fc00,-0x7d8a8000],
+         [1,-0x19220000,-0x764200, [0x7d8a8000,-0x19220000, 1], 1, [0x19220000, 0x7d8a8000,-1],-0x30fc00, 0x7d8a8000],
+         [1,-0x471d0000,-0x30fc00, [0x471d0000, 0x6a6d8000, 1],-1, [0x471d0000,-0x6a6d8000, 1], 0x764200,-0x6a6d8000],
+         [1,-0x6a6d8000, 0x30fc00, [0x6a6d8000,-0x471d0000, 1],-1, [0x6a6d8000, 0x471d0000, 1],-0x764200, 0x471d0000],
+         [1,-0x7d8a8000, 0x764200, [0x7d8a8000, 0x19220000,-1], 1, [0x19220000,-0x7d8a8000, 1], 0x30fc00,-0x19220000]]
+        
+    prescale_facs = np.array([0x5a8200, (1/16777216), 1, 0xb50400, 0x5a8200, 0xb50400, 1, 1])   # last element is first shifted >>16 and then <<8
     
     y_blocks = []
     
@@ -462,49 +469,53 @@ def idct(macro_blocks, sec1_data):
         block_mat_cols = current_block.shape[0]
         block_mat_rows = current_block.shape[1]                                             
         
-        stage_1_res = np.dot(dct_mat_T[:,0:block_mat_rows],
+        stage_1_res = np.dot(dct_mat_1[:,0:block_mat_rows],
                              current_block[0:block_mat_cols*block_mat_rows].reshape((block_mat_cols, block_mat_rows)).T)
         
-        dim = stage_1_res.shape[1]
-        y_block = np.zeros(64, dtype="int64").reshape((8,8))
-        if dim == 1:
-            factors = np.array([0x5A82, 0x5A82, 0x5A82, 0x5A82, 
-                                0x5A82, 0x5A82, 0x5A82, 0x5A82], dtype="int64").reshape((1,8))
-            y_block = np.right_shift(np.dot(stage_1_res, factors), 32)
-            
-        elif dim == 2:
-            factors = np.array([0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200,
-                                0x7D8A80, 0x6A6080, 0x471D00, 0x192200,-0x192200,-0x471D00,-0x6A6080,-0x7D8A80], dtype="int64").reshape((2,8))
-            
-            for i in range(0,8):
-                for j in range(0, 2):
-                    y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
-            y_block = np.right_shift(y_block, 8)
-            
-        elif dim == 3:
-            factors = np.array([0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200,
-                                0x6A6080, 0x7D8A80, 0x192200, 0x471D00,-0x471D00,-0x192200,-0x7D8A80,-0x6A6080,
-                                0x30FC00, 0x764200,-0x764200,-0x30FC00,-0x30FC00,-0x764200, 0x764200, 0x30FC00], dtype="int64").reshape((2,8))
-            
-            for i in range(0,8):
-                for j in range(0, 3):
-                    y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
-            y_block = np.right_shift(y_block, 8)
-            
-        elif dim == 4:
-            factors = np.array([0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 
-                                0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200,
-                                0x6A6D80, 0x7D8A80, 0x192200, 0x471D00, 
-                               -0x471D00,-0x192200,-0x7D8A80,-0x6A6D80,
-                                0x30FC00, 0x764200,-0x764200,-0x30FC00, 
-                               -0x30FC00,-0x764200, 0x764200, 0x30FC00,
-                               -0x18F900, 0x6A6E00,-0x471D00, 0x7D8A00, 
-                               -0x7D8A00, 0x471D00,-0x6A6E00, 0x18F900], dtype="int64").reshape((2,8))
-            
-            for i in range(0,8):
-                for j in range(0, 4):
-                    y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
-            y_block = np.right_shift(y_block, 8)
+        
+        
+# =============================================================================
+#         dim = stage_1_res.shape[1]
+#         y_block = np.zeros(64, dtype="int64").reshape((8,8))
+#         if dim == 1:
+#             factors = np.array([0x5A82, 0x5A82, 0x5A82, 0x5A82, 
+#                                 0x5A82, 0x5A82, 0x5A82, 0x5A82], dtype="int64").reshape((1,8))
+#             y_block = np.right_shift(np.dot(stage_1_res, factors), 32)
+#             
+#         elif dim == 2:
+#             factors = np.array([0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200,
+#                                 0x7D8A80, 0x6A6080, 0x471D00, 0x192200,-0x192200,-0x471D00,-0x6A6080,-0x7D8A80], dtype="int64").reshape((2,8))
+#             
+#             for i in range(0,8):
+#                 for j in range(0, 2):
+#                     y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
+#             y_block = np.right_shift(y_block, 8)
+#             
+#         elif dim == 3:
+#             factors = np.array([0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200,
+#                                 0x6A6080, 0x7D8A80, 0x192200, 0x471D00,-0x471D00,-0x192200,-0x7D8A80,-0x6A6080,
+#                                 0x30FC00, 0x764200,-0x764200,-0x30FC00,-0x30FC00,-0x764200, 0x764200, 0x30FC00], dtype="int64").reshape((2,8))
+#             
+#             for i in range(0,8):
+#                 for j in range(0, 3):
+#                     y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
+#             y_block = np.right_shift(y_block, 8)
+#             
+#         elif dim == 4:
+#             factors = np.array([0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 
+#                                 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200,
+#                                 0x6A6D80, 0x7D8A80, 0x192200, 0x471D00, 
+#                                -0x471D00,-0x192200,-0x7D8A80,-0x6A6D80,
+#                                 0x30FC00, 0x764200,-0x764200,-0x30FC00, 
+#                                -0x30FC00,-0x764200, 0x764200, 0x30FC00,
+#                                -0x18F900, 0x6A6E00,-0x471D00, 0x7D8A00, 
+#                                -0x7D8A00, 0x471D00,-0x6A6E00, 0x18F900], dtype="int64").reshape((2,8))
+#             
+#             for i in range(0,8):
+#                 for j in range(0, 4):
+#                     y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
+#             y_block = np.right_shift(y_block, 8)
+# =============================================================================
             
         y_blocks.append(y_block)
 
