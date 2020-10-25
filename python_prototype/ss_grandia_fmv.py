@@ -66,8 +66,9 @@ class section1:
     """
     Contains shape codes for each macro block
     
-    First 3 bits are the number of columns
-    Last 3 bits are the number of rows
+    3 MSBs are columns
+    3 LSBs are rows
+    
     
     Decoded Y channel data stored @60B9000, pointer stored @602F0EC
     Decoded Cb channel data stored @60B9F20, pointer stored @602F0F0
@@ -183,7 +184,21 @@ class section1:
         return ((code & 0x7) + 1) * ((code >> 3) + 1)
     
     def get_dim(self, code):
-        return ((code >> 3) +1, (code & 0x7) + 1)
+        """
+        Returns dimension of the sub macro block. The result is swapped
+        compared to numpy's notation because the game fills columns first!
+
+        Parameters
+        ----------
+        code : int
+            dimension code from section 1.
+
+        Returns
+        -------
+        List
+            (columns, rows).
+        """                                                   
+        return ((code >> 3) + 1, (code & 0x7) + 1)
     
     def get_y(self):
         code = self._y_codes[self._y_pos]
@@ -521,7 +536,7 @@ class dct:
     
     def _idct_1(self, block):
         
-        rows = block.shape[1]
+        rows = block.shape[0]
         
         return np.dot(self.dct_mat_1_fix[:,0:rows], block)
     
@@ -580,44 +595,14 @@ class dct:
             
             decoded_block[:,j] = facs.sum(axis=1)
             decoded_block[:,j] >>= 8
-        
-
+            
+        return decoded_block
 
 def decode_differential(macro_blocks):
     elem0 = 0
     for macro_block in macro_blocks:
         elem0 += macro_block[0,0]
         macro_block[0,0] = elem0
-        
-        
-def decode_macroblocks(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
-    
-    macro_blocks = []                                                           #first block @60C56B0, second block @60C57B0, third block @☺60C58B0  
-    cntr = 44    
-    while cntr:    
-        macro_blocks.append(gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel))
-        cntr -= 1   
-        
-    decode_differential(macro_blocks)
-    sec1_data.reset()
-    
-    
-    y_blocks = []
-    odct = dct()
-    
-    for i in range(0, 44):
-        
-        y_blocks.append(odct.idct(macro_blocks[i]))
-
-# =============================================================================
-#         step_1_res = np.empty(64, dtype="int64")
-#         with open("first_full_rank_frame.bin", "rb") as ifile:
-#             for pos in range(0,64):
-#                 step_1_res[pos] = int().from_bytes(ifile.read(4), "big", signed=True)
-#         step_1_res = step_1_res.reshape((8,8))
-#         
-#         odct._idct_28(step_1_res)
-# =============================================================================
     
 def gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
     
@@ -637,6 +622,32 @@ def gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
                 return macro_block.reshape(sec1_data.get_dim(sec1_code)).T
             macro_block[order.pop(0)] = elem
             elem_num -= 1
+            
+def decode_macroblocks(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
+    
+    macro_blocks = []                                                           #first block @60C56B0, second block @60C57B0, third block @☺60C58B0  
+    cntr = 44    
+    while cntr:    
+        macro_blocks.append(gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel))
+        cntr -= 1   
+        
+    decode_differential(macro_blocks)
+    sec1_data.reset()
+    
+    y_blocks = []                                                               # stored @603FFC0, offset 0x2c0 to new line because 2 bytes * 22 blocks * 16 pixel 
+    odct = dct()
+    
+    for i in range(0, 44):
+        
+        y_blocks.append(odct.idct(macro_blocks[i]))
+        np.dot(gen_dct_mat1(), np.pad(macro_blocks[6], [(0,6),(0,6)]))
+
+        step_1_res = np.empty(64, dtype="int64")
+        with open("first_full_rank_frame.bin", "rb") as ifile:
+            for pos in range(0,64):
+                step_1_res[pos] = int().from_bytes(ifile.read(4), "big", signed=True)
+        step_1_res = step_1_res.reshape((8,8))
+        odct._idct_28(step_1_res)
 
 def decomp_frame():
     
@@ -649,7 +660,7 @@ def decomp_frame():
     
     data = frame[0]
     var1 = data >> 4                                                            # stored @602F42C
-    quant_sel_lum = data & 0xf                                                           # stored @602F3D0
+    quant_sel_lum = data & 0xf                                                  # stored @602F3D0
     data = frame[1]
     var3 = data >> 4                                                            # stored @602F3D4
     var4 = data & 0xf                                                           # stored @602F3D8
