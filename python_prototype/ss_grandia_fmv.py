@@ -8,7 +8,24 @@ Created on Wed Oct 14 10:25:44 2020
 import numpy as np
 import copy as cpy
 
-def gen_dct_mat():                                                              # Test function unrelated to decoding algorithm
+def gen_dct_mat1():
+    
+    res = np.zeros((8,8))
+    
+    for j in range(0,8):
+        for k in range(0,8):
+            if j == 0:
+                en = np.sqrt(2)/2
+            else:
+                en = 1
+                
+            res[j,k] = en*np.cos((j*(2*k+1)*np.pi)/16)
+            if res[j,k] < 0:
+                res[j,k] += 2
+            
+    return (0.5*res).T
+
+def gen_dct_mat2():
     
     res = np.zeros((8,8))
     
@@ -24,7 +41,7 @@ def gen_dct_mat():                                                              
     return 0.5*res
 
 def fix_to_float(x, n):                                                         # Test function unrelated to decoding algorithm
-    return x.astype(float) / (2**n)
+    return x.astype(float) / (1 << n)
 
 class section0:
     """
@@ -296,53 +313,53 @@ class section3:
         return res
     
 class instruction_decoder:
+    
+    """
+    The instruction table decodes the instruction code. Starts @6039AF4. 
+    
+    Each Element consists of these instructions
+        - number of zeros to write at the begining
+        - how many bits of section 3 to read
+        - offset to add to the section 3 bits
+        - quantization factor to multiply look up table data with
+        
+    This results in this table structure:
+        (number of zeros, sec3_bits, sec3_offset, quant_fac)
+    """
+    _instruction_table = [(0, 0,  0,  1),                              #0
+                           (1, 0,  0,  1),                              #1
+                           (2, 0,  0,  1),                              #2
+                           (3, 0,  0,  1),                              #3
+                           (4, 0,  0,  1),                              #4
+                           (0, 0,  0, -1),                              #5
+                           (1, 0,  0, -1),                              #6
+                           (2, 0,  0, -1),                              #7
+                           (3, 0,  0, -1),                              #8
+                           (4, 0,  0, -1),                              #9
+                           (0, 0,  0,  2),                              #10
+                           (0, 0,  0, -2),                              #11
+                           (1, 0,  0,  2),                              #12
+                           (1, 0,  0, -2),                              #13
+                           (0, 0,  0,  3),                              #14
+                           (0, 0,  0, -3),                              #15
+                           (0, 0,  0,  4),                              #16
+                           (0, 0,  0, -4),                              #17
+                           (0, 1,  5,  1),                              #18
+                           (0, 1,  5, -1),                              #19
+                           (0, 2,  7,  1),                              #20
+                           (0, 2,  7, -1),                              #21
+                           (0, 3, 11,  1),                              #22
+                           (0, 3, 11, -1),                              #23
+                           (0, 4, 19,  1),                              #24
+                           (0, 4, 19, -1),                              #25
+                           (0, 8, 35,  1),                              #26
+                           (0, 8, 35, -1)]                              #27
     """
     Used to generate macro block coefficients from instruction codes
     """
     def __init__(self, sec3_data):
         
         self._sec3_data = sec3_data
-        """
-        The instruction table decodes the instruction code. Starts @6039AF4. 
-        
-        Each Element consists of these instructions
-            - number of zeros to write at the begining
-            - how many bits of section 3 to read
-            - offset to add to the section 3 bits
-            - quantization factor to multiply look up table data with
-            
-        This results in this table structure:
-            (number of zeros, sec3_bits, sec3_offset, quant_fac)
-        """
-        self._instruction_table = [(0, 0,  0,  1),                              #0
-                                   (1, 0,  0,  1),                              #1
-                                   (2, 0,  0,  1),                              #2
-                                   (3, 0,  0,  1),                              #3
-                                   (4, 0,  0,  1),                              #4
-                                   (0, 0,  0, -1),                              #5
-                                   (1, 0,  0, -1),                              #6
-                                   (2, 0,  0, -1),                              #7
-                                   (3, 0,  0, -1),                              #8
-                                   (4, 0,  0, -1),                              #9
-                                   (0, 0,  0,  2),                              #10
-                                   (0, 0,  0, -2),                              #11
-                                   (1, 0,  0,  2),                              #12
-                                   (1, 0,  0, -2),                              #13
-                                   (0, 0,  0,  3),                              #14
-                                   (0, 0,  0, -3),                              #15
-                                   (0, 0,  0,  4),                              #16
-                                   (0, 0,  0, -4),                              #17
-                                   (0, 1,  5,  1),                              #18
-                                   (0, 1,  5, -1),                              #19
-                                   (0, 2,  7,  1),                              #20
-                                   (0, 2,  7, -1),                              #21
-                                   (0, 3, 11,  1),                              #22
-                                   (0, 3, 11, -1),                              #23
-                                   (0, 4, 19,  1),                              #24
-                                   (0, 4, 19, -1),                              #25
-                                   (0, 8, 35,  1),                              #26
-                                   (0, 8, 35, -1)]                              #27
-        
         """
         This look up table contains the quantization factors
         """
@@ -436,88 +453,135 @@ class instruction_decoder:
             
         return rtn
     
-def idct(macro_blocks, sec1_data):
+class dct:
     
-    dct_mat_1 = np.array(
-        [0x5a82, 0x7d8a, 0x7642, 0x6a6e, 0x5a82, 0x471d, 0x30fc, 0x18f9,        # located @6039844
+    '''
+    DCT matrix where all negative entries are offset by +1
+    '''
+    dct_mat_1_fix = np.array(
+        [0x5a82, 0x7d8a, 0x7642, 0x6a6e, 0x5a82, 0x471d, 0x30fc, 0x18f9,    # located @6039844
          0x5a82, 0x6a6e, 0x30fc, 0xe707, 0xa57e, 0x8276, 0x89be, 0xb8e3,         
          0x5a82, 0x471d, 0xcf04, 0x8276, 0xa57e, 0x18f9, 0x7642, 0x6a6e, 
          0x5a82, 0x18f9, 0x89be, 0xb8e3, 0x5a82, 0x6a6e, 0xcf04, 0x8276, 
          0x5a82, 0xe707, 0x89be, 0x471d, 0x5a82, 0x9592, 0xcf04, 0x7d8a, 
          0x5a82, 0xb8e3, 0xcf04, 0x7d8a, 0xa57e, 0xe707, 0x7642, 0x9592, 
          0x5a82, 0x9592, 0x30fc, 0x18f9, 0xa57e, 0x7d8a, 0x89be, 0x471d, 
-         0x5a82, 0x8276, 0x7642, 0x9592, 0x5a82, 0xb8e3, 0x30fc, 0xe707], dtype="int64").reshape((8,8))
+         0x5a82, 0x8276, 0x7642, 0x9592, 0x5a82, 0xb8e3, 0x30fc, 0xe707
+         ], dtype="int64").reshape((8,8))
     
-    dct_mat_2 = \
-        [[1, 0x7d8a8000, 0x764200, [0x19220000, 0x7d8a8000, 1], 1, [0x7d8a8000,-0x19220000, 1], 0x30fc00, 0x19220000],    
-         [1, 0x6a6d8000, 0x30fc00, [0x471d0000,-0x6a6d8000, 1],-1, [0x471d0000, 0x6a6d8000,-1],-0x764200,-0x471d0000], 
-         [1, 0x471d0000,-0x30fc00, [0x6a6d8000, 0x471d0000,-1],-1, [0x6a6d8000,-0x471d0000, 1], 0x764200, 0x6a6d8000],
-         [1, 0x19220000,-0x764200, [0x19220000,-0x7d8a8000, 1], 1, [0x19220000, 0x7d8a8000, 1],-0x30fc00,-0x7d8a8000],
-         [1,-0x19220000,-0x764200, [0x7d8a8000,-0x19220000, 1], 1, [0x19220000, 0x7d8a8000,-1],-0x30fc00, 0x7d8a8000],
-         [1,-0x471d0000,-0x30fc00, [0x471d0000, 0x6a6d8000, 1],-1, [0x471d0000,-0x6a6d8000, 1], 0x764200,-0x6a6d8000],
-         [1,-0x6a6d8000, 0x30fc00, [0x6a6d8000,-0x471d0000, 1],-1, [0x6a6d8000, 0x471d0000, 1],-0x764200, 0x471d0000],
-         [1,-0x7d8a8000, 0x764200, [0x7d8a8000, 0x19220000,-1], 1, [0x19220000,-0x7d8a8000, 1], 0x30fc00,-0x19220000]]
-        
-    prescale_facs = np.array([0x5a8200, (1/16777216), 1, 0xb50400, 0x5a8200, 0xb50400, 1, 1])   # last element is first shifted >>16 and then <<8
+    '''
+    Regular DCT matrix being used (just for reference)
+    '''
+    dct_mat_2_fix = np.array(
+        [0x5a820000, 0x5a820000, 0x5a820000, 0x5a820000, 0x5a820000, 0x5a820000, 0x5a820000, 0x5a820000, 
+         0x7d8a8000, 0x6a6d8000, 0x471d0000, 0x19220000,-0x19220000,-0x471d0000,-0x6a6d8000,-0x7d8a8000,
+         0x76420000, 0x30fc0000,-0x30fc0000,-0x76420000,-0x76420000,-0x30fc0000, 0x30fc0000, 0x76420000,
+         0x6a8a5132,-0x18f877c2,-0x7d89b2aa,-0x46ff7422, 0x46ff7422, 0x7d89b2aa, 0x18f877c2,-0x6a8a5132,
+         0x5a820000,-0x5a820000,-0x5a820000, 0x5a820000, 0x5a820000,-0x5a820000,-0x5a820000, 0x5a820000,
+         0x46ff7422,-0x7d89b2aa, 0x18f877c2, 0x6a8a5132,-0x6a8a5132,-0x18f877c2, 0x7d89b2aa,-0x46ff7422,
+         0x30fc0000,-0x76420000, 0x76420000,-0x30fc0000,-0x30fc0000, 0x76420000,-0x76420000, 0x30fc0000,
+         0x19220000,-0x471d0000, 0x6a6d8000,-0x7d8a8000, 0x7d8a8000,-0x6a6d8000, 0x471d0000,-0x19220000
+         ], dtype="int64").reshape((8,8))
     
-    y_blocks = []
+    dct_2_2 = np.array(
+        [0x7D8A80, 0x6A6080, 0x471D00, 0x192200,-0x192200,-0x471D00,-0x6A6080,-0x7D8A80], dtype='int64')
     
-    for i in range(0, 44):
-        code, _, _ = sec1_data.get_y()
+    dct_2_stage_18 = np.array(
+        [[ 1, 0x764200, 0x30fc00, 1, 1],
+         [-1, 0x30fc00,-0x764200,-1,-1],
+         [-1, 0x30fc00,-0x764200,-1,-1],
+         [ 1, 0x764200, 0x30fc00, 1, 1],
+         [ 1, 0x764200, 0x30fc00, 1, 1],
+         [-1, 0x30fc00,-0x764200,-1,-1],
+         [-1, 0x30fc00,-0x764200,-1,-1],
+         [ 1, 0x764200, 0x30fc00, 1, 1]], dtype="int64")
+       
+    dct_2_stage_28 = np.array(
+        [[1, 1, 0x7d8a8000, 0x19220000],
+         [1, 1, 0x6a6d8000,-0x471d0000],
+         [1,-1, 0x471d0000, 0x6a6d8000],
+         [1,-1, 0x19220000,-0x7d8a8000],
+         [1,-1,-0x19220000, 0x7d8a8000],
+         [1,-1,-0x471d0000,-0x6a6d8000],
+         [1, 1,-0x6a6d8000, 0x471d0000],
+         [1, 1,-0x7d8a8000,-0x19220000]], dtype="int64")
+    
+    def idct(self, block):
         
-        current_block = macro_blocks[i]
-        block_mat_cols = current_block.shape[0]
-        block_mat_rows = current_block.shape[1]                                             
+        step_1_res = self._idct_1(block)
         
-        stage_1_res = np.dot(dct_mat_1[:,0:block_mat_rows],
-                             current_block[0:block_mat_cols*block_mat_rows].reshape((block_mat_cols, block_mat_rows)).T)
+        dim = step_1_res.shape[1]
         
+        if dim == 1:
+            return self._idct_21(step_1_res)
+        elif dim == 2:
+            return self._idct_22(step_1_res)
+        else:
+            return self._idct_28(step_1_res)
+    
+    def _idct_1(self, block):
         
+        rows = block.shape[1]
         
-# =============================================================================
-#         dim = stage_1_res.shape[1]
-#         y_block = np.zeros(64, dtype="int64").reshape((8,8))
-#         if dim == 1:
-#             factors = np.array([0x5A82, 0x5A82, 0x5A82, 0x5A82, 
-#                                 0x5A82, 0x5A82, 0x5A82, 0x5A82], dtype="int64").reshape((1,8))
-#             y_block = np.right_shift(np.dot(stage_1_res, factors), 32)
-#             
-#         elif dim == 2:
-#             factors = np.array([0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200,
-#                                 0x7D8A80, 0x6A6080, 0x471D00, 0x192200,-0x192200,-0x471D00,-0x6A6080,-0x7D8A80], dtype="int64").reshape((2,8))
-#             
-#             for i in range(0,8):
-#                 for j in range(0, 2):
-#                     y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
-#             y_block = np.right_shift(y_block, 8)
-#             
-#         elif dim == 3:
-#             factors = np.array([0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200, 0x5a8200,
-#                                 0x6A6080, 0x7D8A80, 0x192200, 0x471D00,-0x471D00,-0x192200,-0x7D8A80,-0x6A6080,
-#                                 0x30FC00, 0x764200,-0x764200,-0x30FC00,-0x30FC00,-0x764200, 0x764200, 0x30FC00], dtype="int64").reshape((2,8))
-#             
-#             for i in range(0,8):
-#                 for j in range(0, 3):
-#                     y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
-#             y_block = np.right_shift(y_block, 8)
-#             
-#         elif dim == 4:
-#             factors = np.array([0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200, 
-#                                 0x5A8200, 0x5A8200, 0x5A8200, 0x5A8200,
-#                                 0x6A6D80, 0x7D8A80, 0x192200, 0x471D00, 
-#                                -0x471D00,-0x192200,-0x7D8A80,-0x6A6D80,
-#                                 0x30FC00, 0x764200,-0x764200,-0x30FC00, 
-#                                -0x30FC00,-0x764200, 0x764200, 0x30FC00,
-#                                -0x18F900, 0x6A6E00,-0x471D00, 0x7D8A00, 
-#                                -0x7D8A00, 0x471D00,-0x6A6E00, 0x18F900], dtype="int64").reshape((2,8))
-#             
-#             for i in range(0,8):
-#                 for j in range(0, 4):
-#                     y_block[i,:] += np.right_shift(factors[j,:] * stage_1_res[i,j], 32) # functionally the same as matrix multiplication
-#             y_block = np.right_shift(y_block, 8)
-# =============================================================================
+        return np.dot(self.dct_mat_1_fix[:,0:rows], block)
+    
+    def _idct_21(self, block):
+        
+        decoded_block = np.empty((8,8), dtype="int64")
+        for i in range(0,8):
+            decoded_block[:,i] = 0x5a82 * block.reshape(8)
+        return np.right_shift(decoded_block, 32)
+    
+    def _idct_22(self, block):
+        
+        decoded_block = np.empty((8,8), dtype="int64")
+        facs = np.zeros((8,2), dtype='int64')
+        for i in range(0,8):
+            facs[:,0] = 0x5a8200*block[:,0]
+            facs[:,1] = self.dct_2_2[i]*block[:,1]
+            facs[:,0] >>= 32
+            facs[:,1] >>= 32
             
-        y_blocks.append(y_block)
+            decoded_block[:,i] = facs.sum(axis=1)
+            decoded_block[:,i] >>= 8
+            
+        return decoded_block
+        
+    
+    def _idct_28(self, block):
+        
+        decoded_block = np.empty((8,8), dtype="int64")
+        facs = np.zeros((8,4), dtype='int64')
+        
+        '''
+        prescale inputs
+        '''
+        presc = block       
+        presc[:,1] >>= 16
+        presc[:,1] <<= 8
+        presc[:,7] >>= 16
+        presc[:,7] <<= 8
+        
+        '''
+        calculate 2nd iDCT step
+        '''
+        for j in range(0,8):
+            
+            facs[:,0] = 0x5a8200*(presc[:,0]+self.dct_2_stage_18[j,0]*presc[:,4]) >> 32
+            facs[:,1] = ((presc[:,2]*self.dct_2_stage_18[j,1]) >> 32) + \
+                ((presc[:,6]*self.dct_2_stage_18[j,2]) >> 32)
+            facs[:,2] = presc[:,1]+self.dct_2_stage_18[j,3]*(0xb50400*(presc[:,3]+presc[:,5]) >> 32)
+            facs[:,3] = presc[:,7]+self.dct_2_stage_18[j,3]*(0xb50400*(presc[:,3]-presc[:,5]) >> 32)
+            
+            for k in range(0,4):
+                facs[:,k] *= self.dct_2_stage_28[j,k] 
+            facs[:,2] >>= 32
+            facs[:,3] >>= 32
+            
+            decoded_block[:,j] = facs.sum(axis=1)
+            decoded_block[:,j] >>= 8
+        
+
 
 def decode_differential(macro_blocks):
     elem0 = 0
@@ -536,7 +600,24 @@ def decode_macroblocks(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
         
     decode_differential(macro_blocks)
     sec1_data.reset()
-    idct(macro_blocks, sec1_data)
+    
+    
+    y_blocks = []
+    odct = dct()
+    
+    for i in range(0, 44):
+        
+        y_blocks.append(odct.idct(macro_blocks[i]))
+
+# =============================================================================
+#         step_1_res = np.empty(64, dtype="int64")
+#         with open("first_full_rank_frame.bin", "rb") as ifile:
+#             for pos in range(0,64):
+#                 step_1_res[pos] = int().from_bytes(ifile.read(4), "big", signed=True)
+#         step_1_res = step_1_res.reshape((8,8))
+#         
+#         odct._idct_28(step_1_res)
+# =============================================================================
     
 def gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
     
@@ -553,7 +634,7 @@ def gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
                 while elem_num:
                     elem_num -= 1
                     macro_block[order.pop(0)] = 0
-                return macro_block.reshape(sec1_data.get_dim(sec1_code))
+                return macro_block.reshape(sec1_data.get_dim(sec1_code)).T
             macro_block[order.pop(0)] = elem
             elem_num -= 1
 
