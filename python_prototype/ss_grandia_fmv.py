@@ -7,6 +7,7 @@ Created on Wed Oct 14 10:25:44 2020
 
 import numpy as np
 import copy as cpy
+from scipy.optimize import curve_fit
 
 def gen_dct_mat1():
     
@@ -597,6 +598,48 @@ class dct:
             decoded_block[:,j] >>= 8
             
         return decoded_block
+    
+def YCbCr2RGB(y0, y1, cr, cb):
+    
+    def mask(x):
+        if x > 0:
+            return x & 0xff
+        else:
+            return x & 0x00
+        
+    """
+    y stored in M1
+    cr stored in M2
+    cb stored in M3
+    """
+    y0 = int().from_bytes(y0[0:2], 'big', signed=True)
+    y1 = int().from_bytes(y0[2:4], 'big', signed=True)
+    y2 = int().from_bytes(y1[0:2], 'big', signed=True)
+    y3 = int().from_bytes(y1[2:4], 'big', signed=True)
+    cr = int().from_bytes(cr, 'big', signed=True)
+    cb = int().from_bytes(cb, 'big', signed=True)
+    
+    y0 += 124
+    y1 += 124
+    y2 += 124
+    y3 += 124
+    
+    green0 = mask(y0 + cb + cr)    
+    green1 = mask(y1 + cb + cr)
+    green2 = mask(y2 + cb + cr)
+    green3 = mask(y3 + cb + cr)
+    red0 = mask(-2*cr + y0)
+    red1 = mask(-2*cr + y2) 
+    blue0 = mask(-2*cb + y0)
+    blue1 = mask(-2*cb + y2)
+        
+    rgb0 = blue0 << 16 | green0 << 8 | red0
+    rgb1 = blue0 << 16 | green1 << 8 | red0
+    rgb2 = blue1 << 16 | green2 << 8 | red1
+    rgb3 = blue1 << 16 | green3 << 8 | red1
+    
+    return rgb0, rgb1, rgb2, rgb3
+        
 
 def decode_differential(macro_blocks):
     elem0 = 0
@@ -627,15 +670,17 @@ def decode_macroblocks(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
     
     macro_blocks = []                                                           #first block @60C56B0, second block @60C57B0, third block @☺60C58B0  
     cntr = 44    
-    while cntr:    
+    while cntr:
+        if cntr == 5:
+            test = 1
         macro_blocks.append(gen_block(frame, sec1_data, sec2_data, instr_decoder, quant_sel))
         cntr -= 1   
         
     decode_differential(macro_blocks)
     sec1_data.reset()
     
-    y_blocks = []                                                               # stored @603FFC0, offset 0x2c0 to new line because 2 bytes * 22 blocks * 16 pixel 
-    odct = dct()
+    y_blocks = []                                                               # stored @603FFC0, offset 0x2c0 to new line because 2 bytes * 22 blocks * 16 pixel
+    odct = dct()                                                                # @607C7C0
     
     for i in range(0, 44):
         
@@ -648,8 +693,98 @@ def decode_macroblocks(frame, sec1_data, sec2_data, instr_decoder, quant_sel):
                 step_1_res[pos] = int().from_bytes(ifile.read(4), "big", signed=True)
         step_1_res = step_1_res.reshape((8,8))
         odct._idct_28(step_1_res)
+        
+def reverse_color_conv():
+    
+    def fit_func(X, a, d, e, f):
+        r, g, b = X
+        return a*b+d*g+e*r - f
+    
+    r = []
+    g = []
+    b = []
+    y = []
+    cb = []
+    cr = []
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/res1.bin", "rb") as ifile:
+        for i in range(0,44):
+            ifile.read(1)
+            b.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            g.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            r.append(int().from_bytes(ifile.read(1), "big", signed=False))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/res2.bin", "rb") as ifile:
+        for i in range(0,44):
+            ifile.read(1)
+            b.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            g.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            r.append(int().from_bytes(ifile.read(1), "big", signed=False))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/res3.bin", "rb") as ifile:
+        for i in range(0,44):
+            ifile.read(1)
+            b.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            g.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            r.append(int().from_bytes(ifile.read(1), "big", signed=False))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/res4.bin", "rb") as ifile:
+        for i in range(0,44):
+            ifile.read(1)
+            b.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            g.append(int().from_bytes(ifile.read(1), "big", signed=False))
+            r.append(int().from_bytes(ifile.read(1), "big", signed=False))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc11.bin", "rb") as ifile:
+        for i in range(0,44):
+            y.append(int().from_bytes(ifile.read(2), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc12.bin", "rb") as ifile:
+        for i in range(0,44):
+            y.append(int().from_bytes(ifile.read(2), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc13.bin", "rb") as ifile:
+        for i in range(0,44):
+            y.append(int().from_bytes(ifile.read(2), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc14.bin", "rb") as ifile:
+        for i in range(0,44):
+            y.append(int().from_bytes(ifile.read(2), 'big', signed=True))
+            
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc21.bin", "rb") as ifile:
+        for i in range(0,22):
+            cr.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc22.bin", "rb") as ifile:
+        for i in range(0,22):
+            cr.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc23.bin", "rb") as ifile:
+        for i in range(0,22):
+            cr.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc24.bin", "rb") as ifile:
+        for i in range(0,22):
+            cr.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+            
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc31.bin", "rb") as ifile:
+        for i in range(0,22):
+            cb.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc32.bin", "rb") as ifile:
+        for i in range(0,22):
+            cb.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc33.bin", "rb") as ifile:
+        for i in range(0,22):
+            cb.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+    with open("c:/Users/nanashi/Documents/Grandia_FMV/mc34.bin", "rb") as ifile:
+        for i in range(0,22):
+            cb.append(int().from_bytes(ifile.read(4), 'big', signed=True))
+            
+    r = np.array(r)
+    g = np.array(g)
+    b = np.array(b)
+    y = np.array(y)
+    cr = np.array(cr)
+    cb = np.array(cb)
+    
+    res = curve_fit(fit_func, (r, g, b), y, (1, 1, 1, 1))
+    check_res = fit_func((r,g,b), 0.25, 0.5, 0.25, 124)
+    check_res2 = fit_func((r,g,b), 0.114, 0.587, 0.299, 128)
+        
 
 def decomp_frame():
+    
+#    YCbCr2RGB(b'\xff\xbc\xff\xbc', b'\x00\x00\x00\x0c', b'\xff\xff\xff\xf0')
+    reverse_color_conv()
     
     # frame is stored in memory @60CB000
     with open("MOV20.VID", "rb") as \
