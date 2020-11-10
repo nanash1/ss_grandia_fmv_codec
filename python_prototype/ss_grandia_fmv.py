@@ -339,10 +339,10 @@ class instruction_decoder:
         - offset to add to the section 3 bits
         - quantization factor to multiply look up table data with
         
-    This results in this table structure:
+    table structure:
         (number of zeros, sec3_bits, sec3_offset, quant_fac)
     """
-    _instruction_table = [(0, 0,  0,  1),                              #0
+    _instruction_table =  [(0, 0,  0,  1),                              #0
                            (1, 0,  0,  1),                              #1
                            (2, 0,  0,  1),                              #2
                            (3, 0,  0,  1),                              #3
