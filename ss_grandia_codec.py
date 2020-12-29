@@ -10,6 +10,7 @@ from decord import cpu
 from PIL import Image
 from matplotlib.pyplot import imshow
 import numpy as np
+import math
 
 dct_mat1 = np.array([
     [ 2.88223759,-2.51030053,-0.50810609, 1.86601668,-1.27954718,-3.1773366 , 2.78152966, 2.77393359],
@@ -80,32 +81,79 @@ def gen_blocks(chan, bsize=8):
         res.append(np.split(lines[i], block_width, axis=1))
     return res
 
-def find_min(block, bsize=8):
-    
-    idx = bsize - 1
-    while idx > -1:
-        if np.any(block[:,idx]):
-            break
-        idx -= 1
-    rows = idx
-    
-    idx = bsize - 1
-    while idx > -1:
-        if np.any(block[idx,:]):
-            break
-        idx -= 1
-    cols = idx
-    return (cols+1, rows+1)
+def reduce_block(block):
+    '''
+    Reduces the block size by finding the non-zero subblock of a block
 
-def process_block(block):
+    Parameters
+    ----------
+    block : numpy array
+        Macroblock matrix.
+
+    Returns
+    -------
+    numpy array
+        Macroblock matrix.
+
+    '''
+    x, y = np.nonzero(block)
+    if len(x) > 0:
+        x = x.max()
+    else:
+        x = 0
+    if len(y) > 0:
+        y = y.max()
+    else:
+        y = 0
+    return block[:x+1,:y+1]
+
+def preprocess_block(block):
+    '''
+    Executes processing steps that are indepentent per block:
+        - DCT
+        - Quantization
+        - Dimensional reduction
+
+    Parameters
+    ----------
+    block : numpy array
+        Macroblock matrix.
+
+    Returns
+    -------
+    block : numpy array
+        Processed block.
+
+    '''
     block = dct(block)
     block /= quant[quant_level]
     block = np.round(block).astype(int)
-    dims = find_min(block)
-    return block, dims
+    block = reduce_block(block)
+    return block
 
-def gen_code(num_zeros, num, idx, codes, nums):
-    abs_num = abs(num)
+def gen_code(num_zeros, elem, idx, codes, nums):
+    '''
+    Generates block compression codes
+
+    Parameters
+    ----------
+    num_zeros : int
+        Number of unwritten zeros.
+    elem : int
+        Element value.
+    idx : int
+        index of element in flattened macroblock.
+    codes : list
+        new codes are appended to this list.
+    nums : list of (int, int)
+        Additional data is appended to this list (number, size in bits).
+
+    Returns
+    -------
+    None.
+
+    '''
+    abs_elem = abs(elem)
     
     full = 0
     part = 0
@@ -116,7 +164,7 @@ def gen_code(num_zeros, num, idx, codes, nums):
     codes += [29]*full
     nums += [(7,3)]*full
     
-    if abs_num == 1:
+    if abs_elem == 1:
         if part == 5:
             codes += [28]
             part = 4
@@ -125,12 +173,12 @@ def gen_code(num_zeros, num, idx, codes, nums):
             nums += [(6,3)]
             part = 0
             
-        if num == -1:
+        if elem == -1:
             part += 5
         codes += [part]
         return
         
-    elif abs_num == 2:
+    elif abs_elem == 2:
         if part > 3:
             codes += [29]
             nums += [(part,3)]
@@ -140,7 +188,7 @@ def gen_code(num_zeros, num, idx, codes, nums):
             part = 1
             
         code = 10
-        if num == -2:
+        if elem == -2:
             code += 1
         if part == 1:
             code += 2
@@ -154,47 +202,72 @@ def gen_code(num_zeros, num, idx, codes, nums):
             codes += [29]
             nums += [(part,3)]
             
-    if abs_num < 5:
+    if abs_elem < 5:
         code = 14
-        if abs_num == 4:
+        if abs_elem == 4:
             code += 2
         
-    elif abs_num < 7:
+    elif abs_elem < 7:
         code = 18
-        nums += [(abs_num-5, 1)]
+        nums += [(abs_elem-5, 1)]
         
-    elif abs_num < 11:
+    elif abs_elem < 11:
         code = 20
-        nums += [(abs_num-7, 2)]
+        nums += [(abs_elem-7, 2)]
         
-    elif abs_num < 19:
+    elif abs_elem < 19:
         code = 22
-        nums += [(abs_num-11, 3)]
+        nums += [(abs_elem-11, 3)]
         
-    elif abs_num < 35:
+    elif abs_elem < 35:
         code = 24
-        nums += [(abs_num-19, 4)]
+        nums += [(abs_elem-19, 4)]
     else:
         code = 26
         if idx == 0:
-            nums += [(abs_num-35, 11)]
+            nums += [(abs_elem-35, 11)]
         elif idx < 3:
-            nums += [(abs_num-35, 10)]
+            nums += [(abs_elem-35, 10)]
         else:
-            nums += [(abs_num-35, 8)]
+            nums += [(abs_elem-35, 8)]
             
-    if num < 0:
+    if elem < 0:
         code += 1 
     codes += [code]
 
-def compress(block, dims, codes, nums, last_elem):
-    length = dims[0]*dims[1]
+def compress(block, codes, nums, dim_codes, last_elem):
+    '''
+    Generates compressed data from preproccessed blocks
+
+    Parameters
+    ----------
+    block : numpy array
+        preproccessed macro block.
+    codes : list of int
+        Compression codes are appended to this list.
+    nums : list of (int, int)
+        Additional data is appended to this list (number, size in bits).
+    dim_codes : list of int
+        Dimension codes are appended to this list.
+    last_elem : int
+        previous first element.
+
+    Returns
+    -------
+    first_elem : int
+        first element.
+
+    '''
+    cols = block.shape[0]
+    rows = block.shape[1]
+    length = cols*rows
+    dim_codes += [(cols-1 << 3) | (rows-1)]
     block = block.T.reshape(length)
-    block = block[order[dims[0]-1, dims[1]-1]]
+    block = block[order[cols-1, rows-1]]
     zero_cntr = 0
     first_elem = block[0]
     block[0] -= last_elem
-    for i in range(0,length-1):
+    for i in range(0,length):
         elem = block[i]
         if elem == 0:
             zero_cntr += 1
@@ -204,11 +277,199 @@ def compress(block, dims, codes, nums, last_elem):
     codes += [30]
     return first_elem
 
+def gen_start_cond(n:int):
+    '''
+    Generates the starting weights that are ideal if all elements are equally
+    distributed
+
+    Parameters
+    ----------
+    n : int
+        Number of elements.
+
+    Returns
+    -------
+    np.array
+        Array with the weight of each element.
+
+    '''
+    x = int(math.log(n)/math.log(2))
+    i = n - 2**x
+    
+    return np.array((n-2*i)*[1/(2**x)]+(2*i)*[1/(2**(x+1))])
+
+def find_weights(counts):
+    '''
+    Finds the ideal weights for each element so that the compression is minimal
+
+    Parameters
+    ----------
+    counts : dict
+        Dictonary that contains the elements as keys and their number of
+        occurrence as value.
+
+    Returns
+    -------
+    codes : numpy array
+        Codes as numpy array.
+    weights : numpy array
+        Weights for each code as numpy array.
+
+    '''
+    codes = np.array(list(counts.keys()))
+    counts = np.array(list(counts.values()))
+    sort_idx = np.argsort(counts)[::-1]
+    codes = codes[sort_idx]
+    counts = counts[sort_idx]
+    weights = gen_start_cond(len(codes))
+    
+    log2 = math.log(2)
+    for i in range(0, len(counts)-1):
+        pool = []
+        cref = counts[i]
+        wsum = 0
+        csum = 0
+        for j in range(len(counts)-1, i, -1):
+            if weights[j] > 1/256:
+                if csum + counts[j] > cref:
+                    break
+                else:
+                    csum += counts[j]
+                    wsum += weights[j]
+                    pool.append(j)
+        if wsum == 0:
+            break
+        mult = wsum / weights[i]
+        mult = int(math.log(mult)/log2)
+        if mult < 1:
+            continue
+        mult = 2**mult
+        
+        wref = weights[i]*mult
+        wsum = 0
+        cntr = 0
+        for idx in pool:
+            cntr += 1
+            wsum += weights[idx]
+            if wsum == wref:
+                weights[i] *= mult
+                weights[pool[:cntr]] /= mult
+                break
+    
+    weights = np.log(1/weights)/log2
+    return codes, weights
+
+def gen_sec1(y0, y1, cb, cr):
+    sec1 = bytearray(1452)
+    bytepos = 0
+    for i in range(0, len(cb)):
+        sec1[bytepos] = y0[2*i] << 2
+        sec1[bytepos] |= y0[2*i+1] >> 4
+        sec1[bytepos+1] = (y0[2*i+1] << 4) & 0xff
+        sec1[bytepos+1] |= y1[2*i] >> 2
+        sec1[bytepos+2] = (y1[2*i] << 6) & 0xff
+        sec1[bytepos+2] |= y1[2*i+1]
+        sec1[bytepos+3] = cb[i] << 2
+        sec1[bytepos+3] |= cr[i] >> 4
+        sec1[bytepos+3] = (cr[i] << 4) & 0xff
+        
+        bytepos += 6 
+    return sec1
+    
+
+def gen_sec2(code_lines):
+    
+    # analyse the generated codes to find best compression
+    code_count = {}
+    for line in code_lines:
+        for code in line:
+            if code not in code_count:
+                code_count[code] = 1
+            else:
+                code_count[code] += 1
+    codes, weights = find_weights(code_count)
+    
+    sec2_codes = bytearray(16)
+    sec2 = bytearray(1048576)
+    
+    # generate binary code lut
+    bin_lut = {}
+    addr = 0
+    lut_repeats = (0, 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01)
+    for idx, code in enumerate(codes):
+        if code % 2:
+            sec2_codes[int(code/2)] |= int(weights[idx])
+        else:
+            sec2_codes[int(code/2)] |= int(weights[idx]) << 4
+            
+        weight = int(weights[idx])
+        bin_lut[code] = (addr >> (8-weight), weight)
+        addr += lut_repeats[weight]
+        
+    bitpos= 0
+    bytepos = 0
+    line_pos = []
+    for line in comp_codes:
+        for code in line:
+            shift = 8 - bitpos - bin_lut[code][1]
+            bitpos += bin_lut[code][1]
+            if shift < 0:
+                sec2[bytepos] |= bin_lut[code][0] >> -shift
+                bytepos += 1
+                bitpos = -shift
+                shift = 8 + shift
+            sec2[bytepos] |= (bin_lut[code][0] << shift) & 0xff
+            
+        line_pos.append((bytepos, bitpos))
+        
+    return sec2_codes+sec2[:bytepos+1], line_pos
+    
+def gen_sec3(num_lines):
+    sec3 = bytearray(1048576)
+    bitpos= 8
+    bytepos = 0
+    line_pos = []
+    for line in num_lines:
+        for pair in line:
+            bit_size = pair[1]
+            while bit_size:
+                shift = bit_size - bitpos
+                if shift < 0:
+                    sec3[bytepos] |= (pair[0] << -shift) & 0xff
+                    bits_written = bit_size
+                else:
+                    sec3[bytepos] |= (pair[0] >> shift) & 0xff
+                    bits_written = bitpos
+                    bytepos += 1
+                bitpos -= bits_written
+                bit_size -= bits_written
+                if bitpos == 0:
+                    bitpos = 8
+                    
+        line_pos.append((bytepos, 8-bitpos))
+    return sec3[:bytepos+1], line_pos
+
+def gen_sec0(sec2_linepos, sec3_linepos):
+    sec0 = bytearray(66)
+    sec0[1] = 16
+    
+    bytepos = 6
+    for i in range(0, len(sec2_linepos)-1):
+        sec0[bytepos] = (sec2_linepos[i][0] + 15) >> 8                          # +15 because the 16 bytes of the decoding table are included
+        sec0[bytepos+1] = (sec2_linepos[i][0] + 15) & 0xff
+        sec0[bytepos+2] = (sec3_linepos[i][0] - 1) >> 8
+        sec0[bytepos+3] = (sec3_linepos[i][0] - 1) & 0xff
+        sec0[bytepos+4] = sec2_linepos[i][1]
+        sec0[bytepos+5] = sec3_linepos[i][1]
+        
+        bytepos += 6
+    return sec0
+
 order = np.load("order.npy", allow_pickle=True).reshape((8,8))
 quant = np.load("quantize.npy")
-quant_level = 17
+quant_level = 15
 
-vr = VideoReader("examples/stock_video.mp4", ctx=cpu(0))
+vr = VideoReader("examples/intro.mkv", ctx=cpu(0))
 
 frame = Image.fromarray(vr[0].asnumpy(), mode='RGB')
 frame = frame.resize((352, 198), resample=Image.LANCZOS)
@@ -228,14 +489,74 @@ y_blocks = gen_blocks(y)
 cb_blocks = gen_blocks(cb)
 cr_blocks = gen_blocks(cr)
 
-y_blocks = [[process_block(block) for block in line] for line in y_blocks]
-cb_blocks = [[process_block(block) for block in line] for line in cb_blocks]
-cr_blocks = [[process_block(block) for block in line] for line in cr_blocks]
+y_blocks = [[preprocess_block(block) for block in line] for line in y_blocks]
+cb_blocks = [[preprocess_block(block) for block in line] for line in cb_blocks]
+cr_blocks = [[preprocess_block(block) for block in line] for line in cr_blocks]
 
-codes = []
-nums = []
-diff = 0
-for line in y_blocks:
+comp_codes = []
+comp_nums = []
+
+dim_codes_y0 = []
+dim_codes_y1 = []
+dim_codes_cb = []
+dim_codes_cr = []
+
+# generate compression codes and data for each line of the video frame
+# store dimension codes seperately because they aren't stored by line
+for i in range(0, len(cb_blocks)):
+    comp_code_line = []
+    comp_num_line = []
     diff = 0
-    for block in line:
-        diff = compress(*block, codes, nums, diff)
+    y_ind = int(i*2)
+    for block in y_blocks[y_ind]:
+        diff = compress(block, comp_code_line, comp_num_line, dim_codes_y0, diff)
+    diff = 0
+    for block in y_blocks[y_ind+1]:
+        diff = compress(block, comp_code_line, comp_num_line, dim_codes_y1, diff)
+    diff = 0
+    for block in cb_blocks[i]:
+        diff = compress(block, comp_code_line, comp_num_line, dim_codes_cb, diff)
+    diff = 0
+    for block in cr_blocks[i]:
+        diff = compress(block, comp_code_line, comp_num_line, dim_codes_cr, diff)
+    comp_codes.append(comp_code_line)
+    comp_nums.append(comp_num_line)
+    
+# generate sections
+sec1 = gen_sec1(dim_codes_y0, dim_codes_y1, dim_codes_cb, dim_codes_cr)
+sec2, sec2_linepos = gen_sec2(comp_codes)
+sec3, sec3_linepos = gen_sec3(comp_nums)
+sec0 = gen_sec0(sec2_linepos, sec3_linepos)
+
+# generate header
+sec1_start = 10 + len(sec0)
+sec2_start = sec1_start + len(sec1)
+sec3_start = sec2_start + len(sec2)
+if sec3_start % 4:
+    padding = 4 - (sec3_start % 4)
+    sec2 += bytearray(padding)
+    sec3_start += padding
+frame_header = bytearray(10)
+frame_header[0] = 0b0 | quant_level
+frame_header[1] = (quant_level << 4) | quant_level
+frame_header[2] = 22
+frame_header[3] = 11
+frame_header[4] = sec1_start >> 8
+frame_header[5] = sec1_start & 0xff
+frame_header[6] = sec2_start >> 8
+frame_header[7] = sec2_start & 0xff
+frame_header[8] = sec3_start >> 8
+frame_header[9] = sec3_start & 0xff
+
+# write frame
+written = 0
+with open('test.bin', 'wb') as outest:
+    written += outest.write(frame_header)
+    written += outest.write(sec0)    
+    written += outest.write(sec1)    
+    written += outest.write(sec2)
+    written += outest.write(sec3)
+    if written % 0x800:
+        padding = 0x800 - (written % 0x800)
+        written += outest.write(bytearray(padding))
+        
