@@ -4,7 +4,6 @@ Created on Sun Oct 25 17:45:00 2020
 
 @author: nanashi
 """
-
 from decord import VideoReader
 from decord import cpu
 from PIL import Image
@@ -12,25 +11,30 @@ from matplotlib.pyplot import imshow
 import numpy as np
 import math
 
-dct_mat1 = np.array([
-    [ 2.88223759,-2.51030053,-0.50810609, 1.86601668,-1.27954718,-3.1773366 , 2.78152966, 2.77393359],
-    [ 0.45271213, 0.91632663, 0.08420463,-1.49153464, 1.49153464,-0.08420463,-0.91632663,-0.45271213],
-    [-0.09837887,-0.79782624, 0.79782624, 0.09837887, 0.09837887, 0.79782624,-0.79782624,-0.09837887],
-    [ 0.91632663, 1.49153464,-0.45271213,-0.08420463, 0.08420463, 0.45271213,-1.49153464,-0.91632663],
-    [-0.85355339, 0.85355339, 0.85355339,-0.85355339,-0.85355339, 0.85355339, 0.85355339,-0.85355339],
-    [ 0.08420463,-0.45271213,-1.49153464, 0.91632663,-0.91632663, 1.49153464, 0.45271213,-0.08420463],
-    [-0.79782624, 0.09837887,-0.09837887, 0.79782624, 0.79782624,-0.09837887, 0.09837887,-0.79782624],
-    [-1.49153464,-0.08420463, 0.91632663,-0.45271213, 0.45271213,-0.91632663, 0.08420463, 1.49153464]])
-
-dct_mat2 = np.array([
-    [0.35355339, 0.49039264, 0.46193977, 0.41573481, 0.35355339, 0.27778512, 0.19134172, 0.09754516],
-    [0.35355339, 0.41573481, 0.19134172,-0.09754516,-0.35355339,-0.49039264,-0.46193977,-0.27778512],
-    [0.35355339, 0.27778512,-0.19134172,-0.49039264,-0.35355339, 0.09754516, 0.46193977, 0.41573481],
-    [0.35355339, 0.09754516,-0.46193977,-0.27778512, 0.35355339, 0.41573481,-0.19134172,-0.49039264],
-    [0.35355339,-0.09754516,-0.46193977, 0.27778512, 0.35355339,-0.41573481,-0.19134172, 0.49039264],
-    [0.35355339,-0.27778512,-0.19134172, 0.49039264,-0.35355339,-0.09754516, 0.46193977,-0.41573481],
-    [0.35355339,-0.41573481, 0.19134172, 0.09754516,-0.35355339, 0.49039264,-0.46193977, 0.27778512],
-    [0.35355339,-0.49039264, 0.46193977,-0.41573481, 0.35355339,-0.27778512, 0.19134172,-0.09754516]])
+class dct:
+    
+    def __init__(self):
+        self.dct_mat1 = self._gen_dct_mat()
+        self.dct_mat2 = self._gen_dct_mat().T
+        
+    @staticmethod
+    def _gen_dct_mat():
+        
+        res = np.zeros((8,8))
+        
+        for j in range(0,8):
+            for k in range(0,8):
+                if j == 0:
+                    en = np.sqrt(2)/2
+                else:
+                    en = 1
+                    
+                res[j,k] = en*np.cos((j*(2*k+1)*np.pi)/16)
+                
+        return 0.5*res
+    
+    def run(self, block):
+        return np.dot(np.dot(self.dct_mat1, block), self.dct_mat2)
 
 zigzag = np.array([
      0,  1,  8, 16,  9,  2,  3, 10, 
@@ -41,9 +45,6 @@ zigzag = np.array([
     29, 22, 15, 23, 30, 37, 44, 51, 
     58, 59, 52, 45, 38, 31, 39, 46, 
     53, 60, 61, 54, 47, 55, 62, 63], dtype=int)
-
-def dct(block):
-    return np.dot(np.dot(dct_mat1, block), dct_mat2)
 
 def rgb2ycbcr_min(r, g, b):
     y = 0.25*r+0.5*g+0.25*b
@@ -125,7 +126,7 @@ def preprocess_block(block):
         Processed block.
 
     '''
-    block = dct(block)
+    block = dct.run(block)
     block /= quant[quant_level]
     block = np.round(block).astype(int)
     block = reduce_block(block)
@@ -158,19 +159,19 @@ def gen_code(num_zeros, elem, idx, codes, nums):
     full = 0
     part = 0
     if num_zeros > 0:
-        full = int(num_zeros / 7)
-        part = num_zeros % 7
+        full = int(num_zeros / 9)
+        part = num_zeros % 9
         
     codes += [29]*full
-    nums += [(7,3)]*full
+    nums += [(7,3)]*full                                                        # offset by 2, so 7 := 9 zeros
     
     if abs_elem == 1:
         if part == 5:
             codes += [28]
             part = 4
-        elif part == 6:
+        elif part > 5:
             codes += [29]
-            nums += [(6,3)]
+            nums += [(part-2,3)]
             part = 0
             
         if elem == -1:
@@ -181,7 +182,7 @@ def gen_code(num_zeros, elem, idx, codes, nums):
     elif abs_elem == 2:
         if part > 3:
             codes += [29]
-            nums += [(part,3)]
+            nums += [(part-2,3)]
             part = 0
         elif part == 2:
             codes += [28]
@@ -195,12 +196,12 @@ def gen_code(num_zeros, elem, idx, codes, nums):
         codes += [code]
         return
         
-    elif part > 0 or full > 0:
+    elif part > 0:
         if part == 1:
             codes += [28]
         else:
             codes += [29]
-            nums += [(part,3)]
+            nums += [(part-2,3)]
             
     if abs_elem < 5:
         code = 14
@@ -258,8 +259,8 @@ def compress(block, codes, nums, dim_codes, last_elem):
         first element.
 
     '''
-    cols = block.shape[0]
-    rows = block.shape[1]
+    rows = block.shape[0]
+    cols = block.shape[1]
     length = cols*rows
     dim_codes += [(cols-1 << 3) | (rows-1)]
     block = block.T.reshape(length)
@@ -375,7 +376,6 @@ def gen_sec1(y0, y1, cb, cr):
         
         bytepos += 6 
     return sec1
-    
 
 def gen_sec2(code_lines):
     
@@ -393,18 +393,26 @@ def gen_sec2(code_lines):
     sec2 = bytearray(1048576)
     
     # generate binary code lut
+    sort_idx = np.argsort(codes)
+    codes = codes[sort_idx]
+    weights = weights[sort_idx]
     bin_lut = {}
     addr = 0
     lut_repeats = (0, 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01)
-    for idx, code in enumerate(codes):
+    while True:
+        idx = np.argmax(weights)
+        max_code = int(weights[idx])
+        if max_code == 0:
+            break
+        code = codes[idx]
         if code % 2:
             sec2_codes[int(code/2)] |= int(weights[idx])
         else:
             sec2_codes[int(code/2)] |= int(weights[idx]) << 4
             
-        weight = int(weights[idx])
-        bin_lut[code] = (addr >> (8-weight), weight)
-        addr += lut_repeats[weight]
+        bin_lut[code] = (addr >> (8-max_code), max_code)
+        addr += lut_repeats[max_code]
+        weights[idx] = 0
         
     bitpos= 0
     bytepos = 0
@@ -420,7 +428,10 @@ def gen_sec2(code_lines):
                 shift = 8 + shift
             sec2[bytepos] |= (bin_lut[code][0] << shift) & 0xff
             
-        line_pos.append((bytepos, bitpos))
+        if bitpos == 8:
+            line_pos.append((bytepos+1, 0))
+        else:
+            line_pos.append((bytepos, bitpos))
         
     return sec2_codes+sec2[:bytepos+1], line_pos
     
@@ -455,19 +466,20 @@ def gen_sec0(sec2_linepos, sec3_linepos):
     
     bytepos = 6
     for i in range(0, len(sec2_linepos)-1):
-        sec0[bytepos] = (sec2_linepos[i][0] + 15) >> 8                          # +15 because the 16 bytes of the decoding table are included
-        sec0[bytepos+1] = (sec2_linepos[i][0] + 15) & 0xff
-        sec0[bytepos+2] = (sec3_linepos[i][0] - 1) >> 8
-        sec0[bytepos+3] = (sec3_linepos[i][0] - 1) & 0xff
+        sec0[bytepos] = (sec2_linepos[i][0] + 16) >> 8                          # +16 because the 16 bytes of the decoding table are included
+        sec0[bytepos+1] = (sec2_linepos[i][0] + 16) & 0xff
+        sec0[bytepos+2] = (sec3_linepos[i][0]) >> 8
+        sec0[bytepos+3] = (sec3_linepos[i][0]) & 0xff
         sec0[bytepos+4] = sec2_linepos[i][1]
         sec0[bytepos+5] = sec3_linepos[i][1]
         
         bytepos += 6
     return sec0
 
+dct = dct()
 order = np.load("order.npy", allow_pickle=True).reshape((8,8))
 quant = np.load("quantize.npy")
-quant_level = 15
+quant_level = 10
 
 vr = VideoReader("examples/intro.mkv", ctx=cpu(0))
 
