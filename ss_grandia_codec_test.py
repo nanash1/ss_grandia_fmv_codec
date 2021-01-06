@@ -9,9 +9,10 @@ from decord import VideoReader
 from decord import cpu
 from PIL import Image
 import copy as cpy
-from ss_grandia_codec import codec as cdc
 
-codec = cdc()
+from codec import lossless
+from codec import lossy
+from codec import colorspace
 
 '''
 Settings
@@ -91,16 +92,14 @@ r = frame[:,:,0].astype(float)
 g = frame[:,:,1].astype(float)
 b = frame[:,:,2].astype(float)
 
-y, cb_ns, cr_ns = codec.colorspace.rgb2ycbcr_(r, g, b)
-cb = codec.colorspace.subsample420_avrg(cb_ns)
-cr = codec.colorspace.subsample420_avrg(cr_ns)
+y, cb, cr = colorspace.rgb2ycbcr(r, g, b, subsample="discard")
 
 '''
 Generate macroblocks
 '''
-y = codec.block.gen_blocks(y)
-cr = codec.block.gen_blocks(cr)
-cb = codec.block.gen_blocks(cb)
+y = lossless.gen_blocks(y)
+cr = lossless.gen_blocks(cr)
+cb = lossless.gen_blocks(cb)
 
 '''
 Save source channels as reference
@@ -109,31 +108,29 @@ src_y = np.block([[y[s1][s2], y[s1][s4]],
                   [y[s3][s2], y[s3][s4]]])
 src_cb = cpy.copy(cb[sector[0]][sector[1]])
 src_cr = cpy.copy(cr[sector[0]][sector[1]])
-src_cb_ns = cpy.copy(cb_ns[sector[0]*16:sector[0]*16+16,sector[1]*16:sector[1]*16+16])
-src_cr_ns = cpy.copy(cr_ns[sector[0]*16:sector[0]*16+16,sector[1]*16:sector[1]*16+16])
 
 
 '''
 Apply lossy compression
 '''
-y = [[codec.lossy.encode(block, 10) for block in line] for line in y]
-cb = [[codec.lossy.encode(block, 10) for block in line] for line in cb]
-cr = [[codec.lossy.encode(block, 10) for block in line] for line in cr]
+y = [[lossy.encode(block, 10) for block in line] for line in y]
+cb = [[lossy.encode(block, 10) for block in line] for line in cb]
+cr = [[lossy.encode(block, 10) for block in line] for line in cr]
 
 '''
 Decode the lossy compressed test sector (3,7)
 '''
-dct_y0 = codec.lossless.reduce_block(y[s1][s2])
-dct_y1 = codec.lossless.reduce_block(y[s1][s4])
-dct_y2 = codec.lossless.reduce_block(y[s3][s2])
-dct_y3 = codec.lossless.reduce_block(y[s3][s4])
-dct_cb = codec.lossless.reduce_block(cb[sector[0]][sector[1]])
-dct_cr = codec.lossless.reduce_block(cr[sector[0]][sector[1]])
+dct_y0 = lossless.reduce_block(y[s1][s2])
+dct_y1 = lossless.reduce_block(y[s1][s4])
+dct_y2 = lossless.reduce_block(y[s3][s2])
+dct_y3 = lossless.reduce_block(y[s3][s4])
+dct_cb = lossless.reduce_block(cb[sector[0]][sector[1]])
+dct_cr = lossless.reduce_block(cr[sector[0]][sector[1]])
 
-dec_y = np.block([[codec.lossy.decode(dct_y0, 10), codec.lossy.decode(dct_y1, 10)], 
-                  [codec.lossy.decode(dct_y2, 10), codec.lossy.decode(dct_y3, 10)]])
-dec_cb = codec.lossy.decode(dct_cb, 10)
-dec_cr = codec.lossy.decode(dct_cr, 10)
+dec_y = np.block([[lossy.decode(dct_y0, 10), lossy.decode(dct_y1, 10)], 
+                  [lossy.decode(dct_y2, 10), lossy.decode(dct_y3, 10)]])
+dec_cb = lossy.decode(dct_cb, 10)
+dec_cr = lossy.decode(dct_cr, 10)
 
 '''
 Covert test sector to RGB
@@ -144,7 +141,7 @@ for i in range(0,8):
         
         if i == 7 and j == 6:
             test = 1
-        res = codec.colorspace.ycbcr2rgb_test(src_y[i*2,j*2], src_y[i*2,j*2+1], src_y[i*2+1,j*2], src_y[i*2+1,j*2+1], src_cb[i,j], src_cr[i,j])
+        res = colorspace.ycbcr2rgb_test(src_y[i*2,j*2], src_y[i*2,j*2+1], src_y[i*2+1,j*2], src_y[i*2+1,j*2+1], src_cb[i,j], src_cr[i,j])
         test_rgb[2*i,2*j] = res[0]
         test_rgb[2*i,2*j+1] = res[1]
         test_rgb[2*i+1,2*j] = res[2]
@@ -157,7 +154,7 @@ dec_rgb = np.empty((16,16), dtype='object')
 for i in range(0,8):
     for j in range(0,8):
         
-        res = codec.colorspace.ycbcr2rgb_420(dec_y[i*2,j*2], dec_y[i*2,j*2+1], dec_y[i*2+1,j*2], dec_y[i*2+1,j*2+1], dec_cb[i,j], dec_cr[i,j])
+        res = colorspace.ycbcr2rgb_420(dec_y[i*2,j*2], dec_y[i*2,j*2+1], dec_y[i*2+1,j*2], dec_y[i*2+1,j*2+1], dec_cb[i,j], dec_cr[i,j])
         dec_rgb[2*i,2*j] = res[0]
         dec_rgb[2*i,2*j+1] = res[1]
         dec_rgb[2*i+1,2*j] = res[2]
@@ -170,7 +167,7 @@ game_dec_rgb = np.empty((16,16), dtype='object')
 for i in range(0,8):
     for j in range(0,8):
         
-        res = codec.colorspace.ycbcr2rgb_420(game_y[i*2,j*2], game_y[i*2,j*2+1], game_y[i*2+1,j*2], game_y[i*2+1,j*2+1], game_cb[i,j], game_cr[i,j])
+        res = colorspace.ycbcr2rgb_420(game_y[i*2,j*2], game_y[i*2,j*2+1], game_y[i*2+1,j*2], game_y[i*2+1,j*2+1], game_cb[i,j], game_cr[i,j])
         game_dec_rgb[2*i,2*j] = res[0]
         game_dec_rgb[2*i,2*j+1] = res[1]
         game_dec_rgb[2*i+1,2*j] = res[2]
@@ -179,7 +176,7 @@ for i in range(0,8):
 '''
 Apply lossless copmression and write the generated frame data
 '''
-compressed = codec.lossless.encode(y, cb, cr, 10)
+compressed = lossless.encode(y, cb, cr, 10)
 
 # write frame
 written = 0
