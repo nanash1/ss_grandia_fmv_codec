@@ -463,8 +463,8 @@ def encode(y, cb, cr, level):
     frame_header = bytearray(10)
     frame_header[0] = 0b0 | level
     frame_header[1] = (level << 4) | level
-    frame_header[2] = height
-    frame_header[3] = width
+    frame_header[2] = width
+    frame_header[3] = height
     frame_header[4] = sec1_start >> 8
     frame_header[5] = sec1_start & 0xff
     frame_header[6] = sec2_start >> 8

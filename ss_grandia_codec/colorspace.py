@@ -74,10 +74,7 @@ def subsample420_avrg(chan: np.ndarray) -> np.ndarray:
 
     """
     chan1 = chan[::2,::2]
-    #chan2 = chan[::2,1::2]
     chan3 = chan[1::2,::2]
-    #chan4 = chan[1::2,1::2]
-    
     res = chan1+chan3
     return res/2
 

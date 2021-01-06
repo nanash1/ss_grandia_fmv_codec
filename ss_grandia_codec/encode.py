@@ -56,7 +56,7 @@ def encode_frame(frame : np.ndarray, level : int, subsample="discard", **kwargs)
     g = frame[:,:,1].astype(float)
     b = frame[:,:,2].astype(float)
     
-    y, cb, cr = colorspace.rgb2ycbcr(r, g, b, subsample="discard", **kwargs)
+    y, cb, cr = colorspace.rgb2ycbcr(r, g, b, subsample=subsample, **kwargs)
     
     y = lossless.gen_blocks(y)
     cr = lossless.gen_blocks(cr)
