@@ -55,19 +55,19 @@ def _idct_21(block):
 
 def _idct_22(block):
     
-    res1 = np.dot(block[:,0:1], dct_mat_22_fix, block[0:1,:])
-    res2 = np.dot(block[:,1:2], dct_mat_22_fix, block[1:2,:])
+    res1 = np.dot(block[:,0:1], dct_mat_22_fix[0:1,:])
+    res2 = np.dot(block[:,1:2], dct_mat_22_fix[1:2,:])
     res = np.right_shift(res1, 32) + np.right_shift(res2, 32)
-    res = np.right_shift(res1, 8)
+    res = np.right_shift(res, 8)
     return res
 
 def _idct_23(block):
     
-    res1 = np.dot(block[:,0:1], dct_mat_23_fix, block[0:1,:])
-    res2 = np.dot(block[:,1:2], dct_mat_23_fix, block[1:2,:])
-    res3 = np.dot(block[:,2:3], dct_mat_23_fix, block[2:3,:])
+    res1 = np.dot(block[:,0:1], dct_mat_23_fix[0:1,:])
+    res2 = np.dot(block[:,1:2], dct_mat_23_fix[1:2,:])
+    res3 = np.dot(block[:,2:3], dct_mat_23_fix[2:3,:])
     res = np.right_shift(res1, 32) + np.right_shift(res2, 32) + np.right_shift(res3, 32)
-    res = np.right_shift(res1, 8)
+    res = np.right_shift(res, 8)
     return res
 
 def _idct_24(block):
@@ -78,7 +78,7 @@ def _idct_24(block):
     res4 = np.dot(block[:,3:4], dct_mat_24_fix, block[3:4,:])
     res = np.right_shift(res1, 32) + np.right_shift(res2, 32) + \
         np.right_shift(res3, 32) + np.right_shift(res4, 32)
-    res = np.right_shift(res1, 8)
+    res = np.right_shift(res, 8)
     return res
 
 def _idct_25(block):
@@ -92,12 +92,12 @@ def _idct_25(block):
         wtf = (0x7d8a00*wtf)>>32
         
         res[i,0] = fy +((0x6a6d80*block[i,1])>>32) +((0x30fc00*block[i,2])>>32) -((0x18F900*block[i,3])>>32)
-        res[i,1] = fp +((0x7d8a00*block[i,1])>>32) +((0x764200*block[i,2])>>32) +((0x6a6d80*block[i,3])>>32)
+        res[i,1] = fp +((0x7d8a00*block[i,1])>>32) +((0x764200*block[i,2])>>32) +((0x6a6e00*block[i,3])>>32)
         res[i,2] = fp +((0x192200*block[i,1])>>32) -((0x764200*block[i,2])>>32) -((0x471d00*block[i,3])>>32)
         res[i,3] = fy -((0x30fc00*block[i,1])>>32) +wtf
         res[i,4] = fy -((0x30fc00*block[i,1])>>32) -wtf
         res[i,5] = fp -((0x192200*block[i,1])>>32) -((0x764200*block[i,2])>>32) +((0x471d00*block[i,3])>>32)
-        res[i,6] = fp -((0x7d8a00*block[i,1])>>32) +((0x764200*block[i,2])>>32) -((0x6a6d80*block[i,3])>>32)
+        res[i,6] = fp -((0x7d8a00*block[i,1])>>32) +((0x764200*block[i,2])>>32) -((0x6a6e00*block[i,3])>>32)
         res[i,7] = fy -((0x6a6d80*block[i,1])>>32) +((0x30fc00*block[i,2])>>32) +((0x18F900*block[i,3])>>32)
         
     return np.right_shift(res, 8)

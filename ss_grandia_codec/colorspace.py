@@ -105,7 +105,7 @@ def rgb2ycbcr(r, g, b, subsample="avrg", **kwargs):
         Clips blue channel colors in the specified boundaries
     yscale : tuple
         Scale y channel to specified boundaries
-    cscale : tuple
+    cscale : int
         Scale cb and cr channel to specified boundaries
 
     Returns
@@ -136,8 +136,8 @@ def rgb2ycbcr(r, g, b, subsample="avrg", **kwargs):
         y = scale(y, *kwargs["yscale"])                                         # See Gibb's Phenomenon and https://en.wikipedia.org/wiki/YCbCr
         kwargs.pop("yscale")
     if "cscale" in kwargs:
-        cb = scale(cb, *kwargs["cscale"])
-        cr = scale(cr, *kwargs["cscale"])
+        cb = scale(cb, 0, kwargs["cscale"])
+        cr = scale(cr, 0, kwargs["cscale"])
         kwargs.pop("cscale")
     y -= 124
     

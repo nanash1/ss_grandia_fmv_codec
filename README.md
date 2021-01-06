@@ -28,7 +28,11 @@ frame = frame.crop((0, 11, 352, 187))
 frame = np.array(frame)
 
 # Encode frame to raw video data
-frame_data = ss_grandia_codec.encode_frame(frame, compression_level)
+frame_data = ss_grandia_codec.encode_frame(frame, compression_level, subsample="avrg", yscale=(16,235), cscale=224)
+
+# Write the result to a file
+with open("encoded.bin", "wb") as outf:
+    outf.write(frame_data)
 ```
 
 The encode_frame function has some optional keyword arguments, so make sure to read the docstring.

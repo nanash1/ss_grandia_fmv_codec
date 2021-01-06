@@ -10,9 +10,9 @@ from decord import cpu
 from PIL import Image
 import copy as cpy
 
-from codec import lossless
-from codec import lossy
-from codec import colorspace
+from ss_grandia_codec import lossless
+from ss_grandia_codec import lossy
+from ss_grandia_codec import colorspace
 
 '''
 Settings
@@ -28,19 +28,19 @@ s4 = sector[1]*2+1
 Read decoded data from game dump of HWRAM
 '''
 decoded_y = np.zeros((176,352), dtype=int)
-with open('esp_y.bin', 'rb') as decoded:
+with open('test/esp_y.bin', 'rb') as decoded:
     for i in range(0, 176):
         for j in range(0, 352):
             decoded_y[i,j] = int.from_bytes(decoded.read(2), byteorder='big', signed=True)
 
 decoded_cr = np.zeros((88,176), dtype=int)
-with open('esp_cb.bin', 'rb') as decoded:
+with open('test/esp_cb.bin', 'rb') as decoded:
     for i in range(0, 88):
         for j in range(0, 176):
             decoded_cr[i,j] = int.from_bytes(decoded.read(4), byteorder='big', signed=True)
 
 decoded_cb = np.zeros((88,176), dtype=int)            
-with open('esp_cr.bin', 'rb') as decoded:
+with open('test/esp_cr.bin', 'rb') as decoded:
     for i in range(0, 88):
         for j in range(0, 176):
             decoded_cb[i,j] = int.from_bytes(decoded.read(4), byteorder='big', signed=True)
@@ -57,7 +57,7 @@ game_y = np.block([[decoded_y[s1*8:(s1*8)+8,s2*8:(s2*8)+8], decoded_y[s1*8:(s1*8
 Read decoded data from game dump of VDP2RAM
 '''
 image_raw = bytes()
-with open('esp_vdp2.bin', 'rb') as im:
+with open('test/esp_vdp2.bin', 'rb') as im:
     while True:
         data = im.read(4)
         
@@ -92,7 +92,7 @@ r = frame[:,:,0].astype(float)
 g = frame[:,:,1].astype(float)
 b = frame[:,:,2].astype(float)
 
-y, cb, cr = colorspace.rgb2ycbcr(r, g, b, subsample="discard")
+y, cb, cr = colorspace.rgb2ycbcr(r, g, b, subsample="discard", rclip=(3,251), gclip=(3,251),bclip=(3,251))
 
 '''
 Generate macroblocks

@@ -39,11 +39,13 @@ def encode_frame(frame : np.ndarray, level : int, subsample="discard", **kwargs)
         Clips blue channel colors to the specified boundaries before the colorspace
         conversion to avoid overflows.
     yscale : (int, int)
-        Scale y channel to  the specified boundaries to avoid 
-        overflows. See https://en.wikipedia.org/wiki/YCbCr
-    cscale : (int, int)
+        Scale y channel to the specified boundaries to avoid 
+        overflows. y ranges from 0-255. See https://en.wikipedia.org/wiki/YCbCr
+    cscale : int
         Scale cb and cr channel to the specified boundaries to avoid 
-        overflows. See https://en.wikipedia.org/wiki/YCbCr
+        overflows. c channels range from -128 to 127. Since c channels are 
+        symetric there is only one value.
+        
 
     Returns
     -------
@@ -66,4 +68,4 @@ def encode_frame(frame : np.ndarray, level : int, subsample="discard", **kwargs)
     cb = [[lossy.encode(block, level) for block in line] for line in cb]
     cr = [[lossy.encode(block, level) for block in line] for line in cr]
     
-    return lossless.encode(y, cb, cr, 10)
+    return lossless.encode(y, cb, cr, level)
