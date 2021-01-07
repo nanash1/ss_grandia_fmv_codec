@@ -4,9 +4,13 @@ Reverse engineered Saturn Grandia FMV codec. Written in Python 3 with Numpy. Thi
 
 ## Usage
 
-The usage is straight forward with some working knowledge of Python. Install the package by changing to the directory that contains setup.py and call "pip install .". The following example code shows how to use the package. You could, of course, use a different method to generate the required numpy array, but I found this to be the fastest.
+The usage is straight forward with some working knowledge of Python. Install the package by changing to the directory that contains setup.py and call run:
+```
+pip install .
+```
+The following example code shows how to use the package. You could, of course, use a different method to generate the required numpy array, but I found this to be the fastest.
 
-```pyhton
+```python
 import numpy as np
 import ss_grandia_codec
 from decord import VideoReader

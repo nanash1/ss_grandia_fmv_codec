@@ -12,7 +12,8 @@ from . import colorspace
 
 def encode_frame(frame : np.ndarray, level : int, subsample="discard", **kwargs):
     """
-    Encodes a frame to 
+    Encodes a frame from an RGB numpy array format to the Grandia video stream
+    format.
 
     Parameters
     ----------
@@ -22,7 +23,7 @@ def encode_frame(frame : np.ndarray, level : int, subsample="discard", **kwargs)
     level : int
         Compression level for this frame. Must be an integer value 
         between 0 and 16. 0 is the lowest compression and 16 the highest.
-    subsampe : "discard" or "avrg"
+    subsample : "discard" or "avrg"
         Determines how the chroma subsampling is handled. In discard mode
         only the upper left pixel in 4x4 unit is sampled. In average mode
         the upper left and lower left pixel are averaged together.
@@ -43,17 +44,16 @@ def encode_frame(frame : np.ndarray, level : int, subsample="discard", **kwargs)
         overflows. y ranges from 0-255. See https://en.wikipedia.org/wiki/YCbCr
     cscale : int
         Scale cb and cr channel to the specified boundaries to avoid 
-        overflows. c channels range from -128 to 127. Since c channels are 
-        symetric there is only one value.
+        overflows. C channels range from -128 to 127. Since c channels are 
+        symmetric there is only one value.
         
 
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    bytearray
+        Binary encoded data.
 
     """
-    
     r = frame[:,:,0].astype(float)
     g = frame[:,:,1].astype(float)
     b = frame[:,:,2].astype(float)
