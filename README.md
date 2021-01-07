@@ -4,7 +4,7 @@ Reverse engineered Saturn Grandia FMV codec. Written in Python 3 with Numpy. Thi
 
 ## Usage
 
-The usage is straight forward with some working knowledge of Python. Install the package by changing to the directory that contains setup.py and call run:
+The usage is straight forward with some working knowledge of Python. Install the package by changing to the directory that contains setup.py and run:
 ```
 pip install .
 ```
