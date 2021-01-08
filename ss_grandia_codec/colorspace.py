@@ -139,7 +139,7 @@ def rgb2ycbcr(r, g, b, subsample="avrg", **kwargs):
         cb = scale(cb, 0, kwargs["cscale"])
         cr = scale(cr, 0, kwargs["cscale"])
         kwargs.pop("cscale")
-    y -= 124
+    y -= 128
     
     if len(kwargs) != 0:
         raise ValueError("Unrecognized keywords")
