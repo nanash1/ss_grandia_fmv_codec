@@ -17,7 +17,7 @@ from ss_grandia_codec import colorspace
 '''
 Settings
 '''
-sector = (3,7)
+sector = (6,11)
 frame_no = 900
 s1 = sector[0]*2
 s2 = sector[1]*2
@@ -118,7 +118,7 @@ cb = [[lossy.encode(block, 10) for block in line] for line in cb]
 cr = [[lossy.encode(block, 10) for block in line] for line in cr]
 
 '''
-Decode the lossy compressed test sector (3,7)
+Decode the lossy compressed test sector
 '''
 dct_y0 = lossless.reduce_block(y[s1][s2])
 dct_y1 = lossless.reduce_block(y[s1][s4])

@@ -112,7 +112,7 @@ def gen_code(num_zeros, elem, idx, codes, nums):
         return
         
     elif abs_elem == 2:
-        if part > 3:
+        if part > 2:
             codes += [29]
             nums += [(part-2,3)]
             part = 0

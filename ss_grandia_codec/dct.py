@@ -102,6 +102,24 @@ def _idct_25(block):
         
     return np.right_shift(res, 8)
 
+def _idct_25c(block):
+    
+    res = np.empty((8,8), dtype="int64")
+    for i in range(0,8):
+        fp = 0x5a8200*(block[i,0] + block[i,4]) >> 32
+        fy = 0x5a8200*(block[i,0] - block[i,4]) >> 32
+        
+        res[i,0] = fp +((0x7d8a00*block[i,1])>>32) +((0x764200*block[i,2])>>32) +((0x6a6e00*block[i,3])>>32)
+        res[i,1] = fy +((0x6a6d80*block[i,1])>>32) +((0x30fc00*block[i,2])>>32) -((0x18F900*block[i,3])>>32)
+        res[i,2] = fy +((0x471d00*block[i,1])>>32) -((0x30fc00*block[i,2])>>32) +((0x7d8a00*block[i,3])>>32)
+        res[i,3] = fp +((0x192200*block[i,1])>>32) -((0x764200*block[i,2])>>32) -((0x471d00*block[i,3])>>32)
+        res[i,4] = fp -((0x192200*block[i,1])>>32) -((0x764200*block[i,2])>>32) +((0x471d00*block[i,3])>>32)
+        res[i,5] = fy -((0x471d00*block[i,1])>>32) -((0x30fc00*block[i,2])>>32) -((0x7d8a00*block[i,3])>>32)
+        res[i,6] = fy -((0x6a6d80*block[i,1])>>32) +((0x30fc00*block[i,2])>>32) +((0x18F900*block[i,3])>>32)
+        res[i,7] = fp -((0x7d8a00*block[i,1])>>32) +((0x764200*block[i,2])>>32) -((0x6a6e00*block[i,3])>>32)
+        
+    return np.right_shift(res, 8)
+
 def _idct_28(block):
     
     res = np.empty((8,8), dtype="int64")
@@ -158,7 +176,7 @@ def idct_i(block):
     elif cols == 4:
         return _idct_24(step_1_res)
     elif cols == 5:
-        return _idct_25(step_1_res)
+        return _idct_25c(step_1_res)
     elif cols == 8:
         return _idct_28(step_1_res)
     else:
